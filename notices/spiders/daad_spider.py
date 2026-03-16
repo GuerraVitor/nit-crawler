@@ -27,7 +27,7 @@ class DaadSpider(scrapy.Spider):
     async def parse(self, response):
         self.logger.info(f"Parsing page: {response.url}")
 
-        # Seleciona todos os itens da lista de bolsas
+        # Select all items from the scholarship list
         opportunities_list = response.css("li.c-scholarship-list__item")
 
         if not opportunities_list:
@@ -38,18 +38,18 @@ class DaadSpider(scrapy.Spider):
         for opportunity in opportunities_list:
             daad_item = DaadItem()
 
-            # Extração de Título e Link
+            # Extract title and link
             title = opportunity.css("h3 a::text").get()
             link_url = opportunity.css("h3 a::attr(href)").get()
 
             daad_item["title"] = title.strip() if title else None
             daad_item["link"] = response.urljoin(link_url) if link_url else None
 
-            # Extração de Descrição (resumo da vaga)
+            # Extract description
             description = opportunity.css("p.u-size-teaser::text").get()
             daad_item["description"] = description.strip() if description else None
 
-            # Extração de Prazo de inscrição e Status para compor a Observação (ou outros campos se houver no seu Item)
+            # Extract deadline and status to compose observation
             deadline_texts = opportunity.xpath('.//dt[contains(., "Prazo de inscrição:")]/following-sibling::dd[1]//text()').getall()
             deadline = " ".join([t.strip() for t in deadline_texts if t.strip()])
 
@@ -66,7 +66,7 @@ class DaadSpider(scrapy.Spider):
             if daad_item.get("title"):
                 yield daad_item
 
-        # Lógica de paginação - Busca pela seta de "Próxima página"
+        # Handle pagination (Next page arrow)
         next_page = response.css('a[aria-label="Próxima página"]::attr(href)').get()
         if next_page:
             yield response.follow(next_page, callback=self.parse, meta={"playwright": True})
