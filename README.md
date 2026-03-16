@@ -35,7 +35,7 @@ nit_crawler/
 │   ├── results_spiders/     # Spiders output
 │   ├── spiders/             # Spider implementations
 │   │   ├── cmp_spider.py    # CMP funding spider
-│   │   ├── dead_spider.py   # DEAD.org.br spider
+│   │   ├── daad_spider.py   # DAAD-brasil.org spider
 │   │   ├── erasmus_spider.py # Erasmus programs spider
 │   │   └── ...              # Other spiders
 │   ├── items.py             # Data structure definitions
