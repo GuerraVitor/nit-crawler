@@ -22,7 +22,7 @@ class FaperjSpider(scrapy.Spider):
     allowed_domains = ["faperj.br"]
     start_urls = ["https://www.faperj.br/?id=28.5.7"]
 
-    def start_requests(self) -> Iterable[scrapy.Request]:
+    async def start(self) -> Iterable[scrapy.Request]:
         for url in self.start_urls:
             yield scrapy.Request(url, meta={"playwright": True})
 

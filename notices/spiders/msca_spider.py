@@ -21,7 +21,7 @@ class MarieCurieSpider(scrapy.Spider):
         "&sortonly=false&type=calls"
     )
 
-    def start_requests(self) -> Iterable[scrapy.Request]:
+    async def start(self) -> Iterable[scrapy.Request]:
         # Start from first page (offset 0)
         yield scrapy.Request(
             url=self.api_url.format(offset=0),

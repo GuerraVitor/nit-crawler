@@ -30,7 +30,7 @@ class EuraexxSpider(scrapy.Spider):
         "?f%5B0%5D=offer_type%3Afunding"
     ]
 
-    def start_requests(self) -> Iterable[scrapy.Request]:
+    async def start(self) -> Iterable[scrapy.Request]:
         yield scrapy.Request(
             url=self.start_urls[0],
             meta={

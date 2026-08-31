@@ -1,7 +1,9 @@
-import scrapy
 import re
-from scrapy.http import Response
 from typing import Any, Iterable
+
+import scrapy
+from scrapy.http import Response
+
 from notices.items import DaadItem
 
 
@@ -11,16 +13,33 @@ class DaadSpider(scrapy.Spider):
     start_urls = ["https://www.daad-brasil.org/pt/bolsas/busca/?language=pt"]
 
     custom_settings = {
+        "ROBOTSTXT_OBEY": False,
         "USER_AGENT": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
             "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/122.0.0.0 Safari/537.36"
+            "Chrome/140.0.0.0 Safari/537.36"
         ),
-        "ROBOTSTXT_OBEY": False,
         "DEFAULT_REQUEST_HEADERS": {
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
         },
+        "DOWNLOAD_HANDLERS": {
+            "http": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
+            "https": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
+        },
+        "PLAYWRIGHT_PAGE_GOTO_KWARGS": {
+            "wait_until": "domcontentloaded",
+            "timeout": 90_000,
+        },
     }
+
+    async def start(self) -> Iterable[scrapy.Request]:
+        for url in self.start_urls:
+            yield scrapy.Request(
+                url,
+                callback=self.parse,
+                meta={"playwright": True},
+            )
 
     def parse(self, response: Response, **kwargs: Any) -> Iterable[Any]:
         self.logger.info(f"Parsing page: {response.url}")
@@ -35,7 +54,6 @@ class DaadSpider(scrapy.Spider):
         for opportunity in opportunities_list:
             daad_item = DaadItem()
 
-            # Extract title and link
             title = opportunity.css("h3 a::text").get()
             link_url = opportunity.css("h3 a::attr(href)").get()
 
@@ -45,14 +63,12 @@ class DaadSpider(scrapy.Spider):
             else:
                 daad_item["link"] = None
 
-            # Extract description
             description = opportunity.css("p.u-size-teaser::text").get()
             if description:
                 daad_item["description"] = description.strip()
             else:
                 daad_item["description"] = None
 
-            # Extract deadline and status to compose observation
             deadline_texts = opportunity.xpath(
                 './/dt[contains(., "Prazo de inscrição:")]'
                 '/following-sibling::dd[1]//text()'
@@ -96,7 +112,6 @@ class DaadSpider(scrapy.Spider):
             if daad_item.get("title"):
                 yield daad_item
 
-        # Handle pagination
         next_page = response.xpath(
             '//select[@id="pagination"]/option[@selected]'
             '/following-sibling::option[1]/@value'
@@ -107,4 +122,8 @@ class DaadSpider(scrapy.Spider):
             ).get()
 
         if next_page:
-            yield response.follow(next_page, callback=self.parse)
+            yield response.follow(
+                next_page,
+                callback=self.parse,
+                meta={"playwright": True},
+            )

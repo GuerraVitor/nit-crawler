@@ -16,7 +16,7 @@ class UkriSpider(scrapy.Spider):
     allowed_domains = ["www.ukri.org"]
     start_urls = ["https://www.ukri.org/opportunity/"]
 
-    def start_requests(self) -> Iterable[scrapy.Request]:
+    async def start(self) -> Iterable[scrapy.Request]:
         url = "https://www.ukri.org/opportunity/"
         yield scrapy.Request(url, meta={"playwright": True})
 

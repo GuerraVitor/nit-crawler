@@ -14,7 +14,7 @@ class FinepSpider(scrapy.Spider):
         'USER_AGENT': (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
             "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/122.0.0.0 Safari/537.36"
+            "Chrome/140.0.0.0 Safari/537.36"
         ),
         "PLAYWRIGHT_BROWSER_TYPE": "chromium",
         "DOWNLOAD_HANDLERS": {
@@ -27,7 +27,7 @@ class FinepSpider(scrapy.Spider):
         "https://www.finep.gov.br/oportunidades"
     ]
 
-    def start_requests(self) -> Iterable[scrapy.Request]:
+    async def start(self) -> Iterable[scrapy.Request]:
         for url in self.start_urls:
             # Ativa o Playwright para interagir com o portal da Finep
             yield scrapy.Request(

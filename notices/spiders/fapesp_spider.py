@@ -33,7 +33,7 @@ class FapespSpider(scrapy.Spider):
         },
     }
 
-    def start_requests(self) -> Iterable[scrapy.Request]:
+    async def start(self) -> Iterable[scrapy.Request]:
         url = "https://fapesp.br/oportunidades/"
         yield scrapy.Request(url, meta={"playwright": True})
 

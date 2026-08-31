@@ -21,3 +21,4 @@ venv/
 
 # output directories
 results_spiders/
+results_summary/

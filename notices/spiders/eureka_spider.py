@@ -15,11 +15,11 @@ class EurekaSpider(scrapy.Spider):
         "ITEM_PIPELINES": {
             "notices.pipelines.EurekaPipeline": 300,
         },
-        "PLAYWRIGHT_BROWSER_TYPE": "firefox",
+        #"PLAYWRIGHT_BROWSER_TYPE": "firefox",
         "USER_AGENT": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
             "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/122.0.0.0 Safari/537.36"
+            "Chrome/140.0.0.0 Safari/537.36"
         ),
         "ROBOTSTXT_OBEY": False,
         "DOWNLOAD_HANDLERS": {
@@ -28,8 +28,16 @@ class EurekaSpider(scrapy.Spider):
         },
     }
 
-    def _get_playwright_meta(self) -> Dict[str, Any]:
-        """Returns the base metadata for a Playwright request."""
+    def _get_playwright_meta(
+        self, include_page: bool = False
+    ) -> Dict[str, Any]:
+        """Returns the base metadata for a Playwright request.
+
+        `include_page` should only be set for requests whose callback
+        actually uses `response.meta["playwright_page"]` and closes it
+        afterwards - otherwise the page is leaked and the browser
+        eventually stalls under the accumulated open pages.
+        """
 
         async def handle_route(route: Any) -> None:
             if route.request.resource_type in ("image", "font", "stylesheet"):
@@ -37,9 +45,8 @@ class EurekaSpider(scrapy.Spider):
             else:
                 await route.continue_()
 
-        return {
+        meta: Dict[str, Any] = {
             "playwright": True,
-            "playwright_include_page": True,
             "playwright_page_coroutines": [
                 PageMethod("set_default_timeout", 30 * 1000),
                 PageMethod(
@@ -49,10 +56,13 @@ class EurekaSpider(scrapy.Spider):
                 ),
             ],
         }
+        if include_page:
+            meta["playwright_include_page"] = True
+        return meta
 
-    def start_requests(self) -> Iterable[scrapy.Request]:
+    async def start(self) -> Iterable[scrapy.Request]:
         url = self.start_urls[0]
-        meta = self._get_playwright_meta()
+        meta = self._get_playwright_meta(include_page=True)
         yield scrapy.Request(url, callback=self.parse, meta=meta)
 
     async def parse(
@@ -60,58 +70,71 @@ class EurekaSpider(scrapy.Spider):
     ) -> AsyncIterable[Any]:
         page = response.meta["playwright_page"]
 
-        # Process all items on the current page
-        cards = await page.query_selector_all(
-            "div.relative.rounded-lg.overflow-hidden.shadow-lg.group"
-        )
-        for card in cards:
-            link = await card.query_selector("a.absolute.inset-0.z-30")
-            link_url = await link.get_attribute("href") if link else None
+        try:
+            # Process all items on the current page
+            cards = await page.query_selector_all(
+                "div.relative.rounded-lg.overflow-hidden.shadow-lg.group"
+            )
+            opportunities = []
+            for card in cards:
+                link = await card.query_selector("a.absolute.inset-0.z-30")
+                link_url = await link.get_attribute("href") if link else None
 
-            if link_url:
-                title_el = await card.query_selector("h3.text-white")
-                title = await title_el.inner_text() if title_el else ""
+                if link_url:
+                    title_el = await card.query_selector("h3.text-white")
+                    title = await title_el.inner_text() if title_el else ""
 
-                deadline_el = await card.query_selector(
-                    "div.absolute.top-4 div.text-lg"
-                )
-                deadline_text = (
-                    await deadline_el.inner_html() if deadline_el else ""
-                )
-                # Remove HTML tags and extra spaces
-                deadline_text_clean = re.sub(r'<[^>]+>', '', deadline_text)
-                closing_date_match = scrapy.Selector(
-                    text=deadline_text_clean
-                ).re_first(r"Deadline:\s*([\w\s,]+\d{4})")
-                if closing_date_match:
-                    closing_date_clean = closing_date_match.strip()
-                else:
-                    closing_date_clean = ""
+                    deadline_el = await card.query_selector(
+                        "div.absolute.top-4 div.text-lg"
+                    )
+                    deadline_text = (
+                        await deadline_el.inner_html() if deadline_el else ""
+                    )
+                    # Remove HTML tags and extra spaces
+                    deadline_text_clean = re.sub(r'<[^>]+>', '', deadline_text)
+                    closing_date_match = scrapy.Selector(
+                        text=deadline_text_clean
+                    ).re_first(r"Deadline:\s*([\w\s,]+\d{4})")
+                    if closing_date_match:
+                        closing_date_clean = closing_date_match.strip()
+                    else:
+                        closing_date_clean = ""
 
-                img_el = await card.query_selector("img")
-                image_url = await img_el.get_attribute("src") if img_el else ""
+                    img_el = await card.query_selector("img")
+                    image_url = (
+                        await img_el.get_attribute("src") if img_el else ""
+                    )
 
-                item = EurekaItem(
-                    title=title.strip(),
-                    closing_date=closing_date_clean,
-                    link=response.urljoin(link_url),
-                    image_url=image_url,
-                )
-                meta = self._get_playwright_meta()
-                meta["item"] = item
-                yield response.follow(
-                    link_url, callback=self.parse_opportunity, meta=meta
-                )
+                    item = EurekaItem(
+                        title=title.strip(),
+                        closing_date=closing_date_clean,
+                        link=response.urljoin(link_url),
+                        image_url=image_url,
+                    )
+                    opportunities.append((link_url, item))
 
-        # Pagination
-        next_page_link = await page.query_selector("a.next.page-numbers")
-        if next_page_link:
-            next_page_url = await next_page_link.get_attribute("href")
+            # Pagination
+            next_page_link = await page.query_selector("a.next.page-numbers")
+            next_page_url = (
+                await next_page_link.get_attribute("href")
+                if next_page_link
+                else None
+            )
+        finally:
             await page.close()  # Explicitly close the current page
+
+        for link_url, item in opportunities:
+            meta = self._get_playwright_meta()
+            meta["item"] = item
+            yield response.follow(
+                link_url, callback=self.parse_opportunity, meta=meta
+            )
+
+        if next_page_url:
             yield scrapy.Request(
                 response.urljoin(next_page_url),
                 callback=self.parse,
-                meta=self._get_playwright_meta()
+                meta=self._get_playwright_meta(include_page=True),
             )
 
     def parse_opportunity(

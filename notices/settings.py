@@ -15,6 +15,8 @@ BOT_NAME = "notices"
 SPIDER_MODULES = ["notices.spiders"]
 NEWSPIDER_MODULE = "notices.spiders"
 COMMANDS_MODULE = "notices.commands"
+LOG_LEVEL = 'INFO'
+
 
 
 # Crawl responsibly by identifying yourself (and your website) on the user-agent
@@ -35,6 +37,10 @@ custom_settings = {
 ITEM_PIPELINES = {
 }
 
+EXTENSIONS = {
+    "notices.extensions.CrawlSummaryExtension": 500,
+}
+
 # Set settings whose default value is deprecated to a future-proof value
 TWISTED_REACTOR = "twisted.internet.asyncioreactor.AsyncioSelectorReactor"
 FEED_EXPORT_ENCODING = "utf-8"
@@ -47,6 +53,11 @@ OUTPUT_DIR = BASE_DIR / "results_spiders"
 
 # Ensure the output directory exists
 os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+# Directory where per-spider crawl summaries (items saved, pages browsed,
+# elapsed time, time per saved item) are written
+SUMMARY_DIR = BASE_DIR / "results_summary"
+os.makedirs(SUMMARY_DIR, exist_ok=True)
 
 FEEDS = {
     f'{OUTPUT_DIR}/%(name)s.json': {
